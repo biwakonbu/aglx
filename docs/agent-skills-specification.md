@@ -156,13 +156,27 @@ metadata:
 
 ### `allowed-tools` Field (Optional, Experimental)
 
-A space-separated list of pre-approved tools.
+A list of pre-approved tools. The format varies by implementation:
 
 > ⚠️ **Experimental Feature**: Support for this field may vary depending on the agent implementation.
+
+**Agent Skills Specification (agentskills.io):**
+
+Space-separated format:
 
 ```yaml
 allowed-tools: Bash(git:*) Bash(jq:*) Read
 ```
+
+**Claude Code (code.claude.com):**
+
+Comma-separated format:
+
+```yaml
+allowed-tools: Read, Grep, Glob
+```
+
+> **Note**: `aglx` supports both formats by default. Use `-spec=agent-skills` or `--spec=claude-code` to enforce strict format validation.
 
 ---
 

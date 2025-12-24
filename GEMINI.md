@@ -20,6 +20,10 @@ This document outlines the architectural overview, development rules, and guidel
 - **Errors**: Used for specification violations that would break discovery or execution.
 - **Warnings**: Used for best practice recommendations (e.g., large body size, hidden files) that do not strictly violate the spec but may impact performance or security.
 
+### 4. Knowledge Maintenance
+- **Continuous Updates**: AI Agents MUST update `GEMINI.md` files (root and subdirectories) whenever significant architectural changes, new rules, or package responsibilities are added or modified.
+- **Consistency**: Ensure that local `GEMINI.md` files are consistent with the root `GEMINI.md`.
+
 ---
 
 ## Technical Architecture
@@ -49,3 +53,17 @@ Before submitting a pull request:
 1. Run all tests: `go test ./internal/...`
 2. Build the tool: `go build -o aglx ./cmd/aglx`
 3. Validate sample skills: `./aglx validate ./testdata/valid/*`
+
+---
+
+## Directory-Specific Guidelines
+For more detailed information about specific components, refer to the local `GEMINI.md` files:
+- [cmd/](file:///Users/biwakonbu/github/aglx/cmd/GEMINI.md): CLI implementation details.
+- [internal/skill/](file:///Users/biwakonbu/github/aglx/internal/skill/GEMINI.md): Agent Skills validation.
+- [internal/claude/](file:///Users/biwakonbu/github/aglx/internal/claude/GEMINI.md): Claude Skills validation.
+- [internal/checker/](file:///Users/biwakonbu/github/aglx/internal/checker/GEMINI.md): Validation aggregation.
+- [internal/prompt/](file:///Users/biwakonbu/github/aglx/internal/prompt/GEMINI.md): Prompt generation and XML logic.
+- [.github/](file:///Users/biwakonbu/github/aglx/.github/GEMINI.md): CI/CD and GitHub configuration.
+- [docs/](file:///Users/biwakonbu/github/aglx/docs/GEMINI.md): Specifications and documentation.
+- [internal/errors/](file:///Users/biwakonbu/github/aglx/internal/errors/GEMINI.md): Error management and exit codes.
+- [testdata/](file:///Users/biwakonbu/github/aglx/testdata/GEMINI.md): Test patterns and validation data.

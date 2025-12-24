@@ -1,8 +1,7 @@
-// Package checker provides a unified checker for both Agent Skills and Claude Skills.
+// Package checker provides a skill validator for Agent Skills and Claude Code Skills.
 package checker
 
 import (
-	"github.com/biwakonbu/aglx/internal/claude"
 	"github.com/biwakonbu/aglx/internal/skill"
 )
 
@@ -31,90 +30,105 @@ func (s Status) String() string {
 	}
 }
 
-// Result holds the combined validation results for both specifications.
+// CheckOptions configures the validation behavior.
+type CheckOptions struct {
+	// Spec specifies which specification to validate against for SKILL.md.
+	// SpecAuto (default): validates against both specifications
+	// SpecAgentSkills: validates against agentskills.io specification only
+	// SpecClaudeCode: validates against Claude Code specification only
+	Spec skill.Spec
+}
+
+// SpecResult holds the validation result for a single specification.
+type SpecResult struct {
+	ValidationResult *skill.ValidationResult
+	Status           Status
+}
+
+// Result holds the validation result for SKILL.md.
 type Result struct {
 	Path string
 
-	// Agent Skills
-	AgentSkill      *skill.Skill
-	AgentResult     *skill.ValidationResult
-	AgentParseError error
-	AgentStatus     Status
+	// Parsed skill (shared between specs)
+	Skill      *skill.Skill
+	ParseError error
 
-	// Claude Skills
-	ClaudeSkill      *claude.ClaudeSkill
-	ClaudeResult     *claude.ValidationResult
-	ClaudeParseError error
-	ClaudeStatus     Status
+	// Results per specification
+	AgentSkillsResult *SpecResult
+	ClaudeCodeResult  *SpecResult
 }
 
-// Check validates both Agent Skills and Claude Skills for the given directory.
+// Check validates SKILL.md in the given directory.
 func Check(dirPath string) *Result {
+	return CheckWithOptions(dirPath, nil)
+}
+
+// CheckWithOptions validates SKILL.md with custom options.
+func CheckWithOptions(dirPath string, opts *CheckOptions) *Result {
 	result := &Result{
 		Path: dirPath,
 	}
 
-	// Check Agent Skills (SKILL.md)
-	checkAgentSkills(dirPath, result)
+	if opts == nil {
+		opts = &CheckOptions{}
+	}
 
-	// Check Claude Skills (CLAUDE.md)
-	checkClaudeSkills(dirPath, result)
+	// Parse SKILL.md
+	parsedSkill, err := skill.Parse(dirPath)
+	if err != nil {
+		result.ParseError = err
+		return result
+	}
+
+	result.Skill = parsedSkill
+
+	// Validate based on spec option
+	switch opts.Spec {
+	case skill.SpecAuto:
+		// Validate against both specifications
+		result.AgentSkillsResult = validateWithSpec(parsedSkill, skill.SpecAgentSkills)
+		result.ClaudeCodeResult = validateWithSpec(parsedSkill, skill.SpecClaudeCode)
+	case skill.SpecAgentSkills:
+		result.AgentSkillsResult = validateWithSpec(parsedSkill, skill.SpecAgentSkills)
+	case skill.SpecClaudeCode:
+		result.ClaudeCodeResult = validateWithSpec(parsedSkill, skill.SpecClaudeCode)
+	}
 
 	return result
 }
 
-func checkAgentSkills(dirPath string, result *Result) {
-	agentSkill, err := skill.Parse(dirPath)
-	if err != nil {
-		result.AgentParseError = err
-		result.AgentStatus = StatusNotFound
-		return
-	}
+func validateWithSpec(parsedSkill *skill.Skill, spec skill.Spec) *SpecResult {
+	validationResult := skill.ValidateWithOptions(parsedSkill, &skill.ValidationOptions{
+		Spec: spec,
+	})
 
-	result.AgentSkill = agentSkill
-	validationResult := skill.Validate(agentSkill)
-	result.AgentResult = validationResult
-
+	var status Status
 	if validationResult.IsValid() {
 		if validationResult.HasWarnings() {
-			result.AgentStatus = StatusWarning
+			status = StatusWarning
 		} else {
-			result.AgentStatus = StatusPass
+			status = StatusPass
 		}
 	} else {
-		result.AgentStatus = StatusFail
-	}
-}
-
-func checkClaudeSkills(dirPath string, result *Result) {
-	claudeSkill, err := claude.ParseFromDir(dirPath)
-	if err != nil {
-		result.ClaudeParseError = err
-		result.ClaudeStatus = StatusNotFound
-		return
+		status = StatusFail
 	}
 
-	if claudeSkill == nil {
-		result.ClaudeStatus = StatusNotFound
-		return
-	}
-
-	result.ClaudeSkill = claudeSkill
-	validationResult := claude.Validate(claudeSkill)
-	result.ClaudeResult = validationResult
-
-	if validationResult.HasWarnings() {
-		result.ClaudeStatus = StatusWarning
-	} else {
-		result.ClaudeStatus = StatusPass
+	return &SpecResult{
+		ValidationResult: validationResult,
+		Status:           status,
 	}
 }
 
 // CheckMultiple validates multiple directories and returns all results.
 func CheckMultiple(dirPaths []string) []*Result {
+	return CheckMultipleWithOptions(dirPaths, nil)
+}
+
+// CheckMultipleWithOptions validates multiple directories with custom options.
+func CheckMultipleWithOptions(dirPaths []string, opts *CheckOptions) []*Result {
 	var results []*Result
 	for _, dirPath := range dirPaths {
-		results = append(results, Check(dirPath))
+		results = append(results, CheckWithOptions(dirPath, opts))
 	}
 	return results
 }

@@ -42,14 +42,24 @@ func (r *ValidationResult) HasWarnings() bool {
 var namePattern = regexp.MustCompile(`^[a-z0-9]+(-[a-z0-9]+)*$`)
 
 // Validate checks if a skill conforms to the Agent Skills specification.
+// Uses default options (auto-detect format).
 func Validate(skill *Skill) *ValidationResult {
+	return ValidateWithOptions(skill, nil)
+}
+
+// ValidateWithOptions checks if a skill conforms to the specification with custom options.
+func ValidateWithOptions(skill *Skill, opts *ValidationOptions) *ValidationResult {
 	result := &ValidationResult{Skill: skill}
 
+	if opts == nil {
+		opts = &ValidationOptions{}
+	}
+
 	// Validate name (required)
-	validateName(skill, result)
+	validateName(skill, result, opts)
 
 	// Validate description (required)
-	validateDescription(skill, result)
+	validateDescription(skill, result, opts)
 
 	// Validate compatibility (optional, but has constraints if present)
 	validateCompatibility(skill, result)
@@ -58,18 +68,18 @@ func Validate(skill *Skill) *ValidationResult {
 	validateDirectoryMatch(skill, result)
 
 	// Validate allowed-tools (optional, experimental)
-	validateAllowedTools(skill, result)
+	validateAllowedTools(skill, result, opts)
 
 	// Validate optional directories
 	validateOptionalDirectories(skill, result)
 
 	// Validate body size (warning)
-	validateBodySize(skill, result)
+	validateBodySize(skill, result, opts)
 
 	return result
 }
 
-func validateName(skill *Skill, result *ValidationResult) {
+func validateName(skill *Skill, result *ValidationResult, opts *ValidationOptions) {
 	name := skill.Name
 
 	if name == "" {
@@ -131,9 +141,29 @@ func validateName(skill *Skill, result *ValidationResult) {
 			Message: "must not contain consecutive hyphens (--)",
 		})
 	}
+
+	// Claude Code specific validations
+	if opts.Spec == SpecClaudeCode {
+		// Check for XML tags (error)
+		if containsXMLTags(name) {
+			result.Errors = append(result.Errors, ValidationError{
+				Field:   "name",
+				Message: "must not contain XML tags",
+			})
+		}
+
+		// Check for reserved words: "anthropic", "claude" (error)
+		lowerName := strings.ToLower(name)
+		if strings.Contains(lowerName, "anthropic") || strings.Contains(lowerName, "claude") {
+			result.Errors = append(result.Errors, ValidationError{
+				Field:   "name",
+				Message: "must not contain reserved words 'anthropic' or 'claude'",
+			})
+		}
+	}
 }
 
-func validateDescription(skill *Skill, result *ValidationResult) {
+func validateDescription(skill *Skill, result *ValidationResult, opts *ValidationOptions) {
 	desc := skill.Description
 
 	if desc == "" {
@@ -150,6 +180,17 @@ func validateDescription(skill *Skill, result *ValidationResult) {
 			Field:   "description",
 			Message: fmt.Sprintf("must be 1-1024 characters (got %d)", len(desc)),
 		})
+	}
+
+	// Claude Code specific validations
+	if opts.Spec == SpecClaudeCode {
+		// Check for XML tags (error)
+		if containsXMLTags(desc) {
+			result.Errors = append(result.Errors, ValidationError{
+				Field:   "description",
+				Message: "must not contain XML tags",
+			})
+		}
 	}
 }
 
@@ -183,16 +224,43 @@ func validateDirectoryMatch(skill *Skill, result *ValidationResult) {
 	}
 }
 
-// toolPattern matches valid tool names: letters and digits (alphanumeric).
+// toolPattern matches valid tool names: letters, digits, hyphens, and underscores.
 // It can optionally include arguments in parentheses like ToolName(arg:*)
-var toolPattern = regexp.MustCompile(`^[a-zA-Z0-9]+(\(.*\))?$`)
+// Examples: Read, Bash(git:*), mcp__figma-desktop, mcp__chrome-devtools
+var toolPattern = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9_-]*(\(.*\))?$`)
 
-func validateAllowedTools(skill *Skill, result *ValidationResult) {
-	tools := skill.ParsedAllowedTools()
-	if len(tools) == 0 {
+func validateAllowedTools(skill *Skill, result *ValidationResult, opts *ValidationOptions) {
+	if skill.AllowedTools == "" {
 		return
 	}
 
+	// Check format based on specification
+	if opts.Spec != SpecAuto {
+		isCommaFormat := strings.Contains(skill.AllowedTools, ", ") || strings.Contains(skill.AllowedTools, ",")
+		isSpaceFormat := !isCommaFormat
+
+		switch opts.Spec {
+		case SpecAgentSkills:
+			if isCommaFormat {
+				result.Errors = append(result.Errors, ValidationError{
+					Field:   "allowed-tools",
+					Message: "must use space-separated format for Agent Skills specification (e.g., 'Read Glob Grep')",
+				})
+				return
+			}
+		case SpecClaudeCode:
+			if isSpaceFormat && len(skill.ParsedAllowedTools()) > 1 {
+				result.Errors = append(result.Errors, ValidationError{
+					Field:   "allowed-tools",
+					Message: "must use comma-separated format for Claude Code specification (e.g., 'Read, Grep, Glob')",
+				})
+				return
+			}
+		}
+	}
+
+	// Validate individual tool names
+	tools := skill.ParsedAllowedTools()
 	for _, tool := range tools {
 		if !toolPattern.MatchString(tool) {
 			result.Errors = append(result.Errors, ValidationError{
@@ -270,14 +338,29 @@ const (
 	// 1 token is roughly 4 characters.
 	MaxBodyTokensRecommended = 5000
 	MaxBodyCharsRecommended  = MaxBodyTokensRecommended * 4
+
+	// MaxBodyLinesClaudeCode is the recommended maximum body size in lines for Claude Code.
+	MaxBodyLinesClaudeCode = 500
 )
 
-func validateBodySize(skill *Skill, result *ValidationResult) {
+func validateBodySize(skill *Skill, result *ValidationResult, opts *ValidationOptions) {
+	// Check token count (Agent Skills recommendation)
 	if len(skill.Body) > MaxBodyCharsRecommended {
 		result.Warnings = append(result.Warnings, ValidationError{
 			Field:   "body",
 			Message: fmt.Sprintf("is very large (approximately %d tokens), recommendation is to keep it under 5000 tokens", len(skill.Body)/4),
 		})
+	}
+
+	// Claude Code specific: check line count
+	if opts.Spec == SpecClaudeCode {
+		lineCount := strings.Count(skill.Body, "\n") + 1
+		if lineCount > MaxBodyLinesClaudeCode {
+			result.Warnings = append(result.Warnings, ValidationError{
+				Field:   "body",
+				Message: fmt.Sprintf("exceeds recommended %d lines (got %d lines), consider splitting into separate files", MaxBodyLinesClaudeCode, lineCount),
+			})
+		}
 	}
 }
 
@@ -288,4 +371,11 @@ func ValidateMultiple(skills []*Skill) []*ValidationResult {
 		results = append(results, Validate(skill))
 	}
 	return results
+}
+
+// containsXMLTags checks if the string contains XML-like tags.
+var xmlTagPattern = regexp.MustCompile(`<[a-zA-Z][^>]*>`)
+
+func containsXMLTags(s string) bool {
+	return xmlTagPattern.MatchString(s)
 }

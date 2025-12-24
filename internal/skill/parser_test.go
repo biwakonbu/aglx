@@ -220,3 +220,33 @@ func TestParsedAllowedTools_MultipleTools(t *testing.T) {
 		}
 	}
 }
+
+func TestParsedAllowedTools_CommaSeparated(t *testing.T) {
+	// Claude Code format
+	skill := &Skill{AllowedTools: "Read, Grep, Glob"}
+	tools := skill.ParsedAllowedTools()
+	expected := []string{"Read", "Grep", "Glob"}
+	if len(tools) != len(expected) {
+		t.Fatalf("expected %d tools, got %d", len(expected), len(tools))
+	}
+	for i, tool := range tools {
+		if tool != expected[i] {
+			t.Errorf("expected %q at index %d, got %q", expected[i], i, tool)
+		}
+	}
+}
+
+func TestParsedAllowedTools_MCPTools(t *testing.T) {
+	// MCP tool names with underscores and hyphens
+	skill := &Skill{AllowedTools: "Read, mcp__figma-desktop, mcp__chrome-devtools"}
+	tools := skill.ParsedAllowedTools()
+	expected := []string{"Read", "mcp__figma-desktop", "mcp__chrome-devtools"}
+	if len(tools) != len(expected) {
+		t.Fatalf("expected %d tools, got %d", len(expected), len(tools))
+	}
+	for i, tool := range tools {
+		if tool != expected[i] {
+			t.Errorf("expected %q at index %d, got %q", expected[i], i, tool)
+		}
+	}
+}

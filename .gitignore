@@ -34,3 +34,6 @@ go.work.sum
 
 # GoReleaser
 dist/
+
+# Local test data (not committed)
+testdata_local/
