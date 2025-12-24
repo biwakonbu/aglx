@@ -38,9 +38,6 @@ func (r *ValidationResult) HasWarnings() bool {
 	return len(r.Warnings) > 0
 }
 
-// namePattern matches valid skill names: lowercase alphanumeric and hyphens.
-var namePattern = regexp.MustCompile(`^[a-z0-9]+(-[a-z0-9]+)*$`)
-
 // Validate checks if a skill conforms to the Agent Skills specification.
 // Uses default options (auto-detect format).
 func Validate(skill *Skill) *ValidationResult {

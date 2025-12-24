@@ -380,10 +380,12 @@ func TestValidate_AllowedTools(t *testing.T) {
 		{"Bash(git:*) Bash(jq:*) Read", true, ""},
 		{"Bash(ls -la) Read", true, ""},
 		{"ValidTool123", true, ""},
-		{"ToolWith_Underscore", false, "invalid tool format"},
+		{"ToolWith_Underscore", true, ""}, // underscore allowed for MCP tools
 		{"Tool.With.Dot", false, "invalid tool format"},
 		{"Tool@At", false, "invalid tool format"},
-		{"Tool-With-Hyphen", false, "invalid tool format"}, // Spec says alphanumeric for tool name
+		{"Tool-With-Hyphen", true, ""},     // hyphen allowed for MCP tools
+		{"mcp__figma-desktop", true, ""},   // MCP tool name
+		{"mcp__chrome-devtools", true, ""}, // MCP tool name
 	}
 
 	for _, tt := range tests {
